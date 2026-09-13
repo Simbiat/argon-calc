@@ -1,0 +1,33 @@
+{
+    "name": "simbiat/argon-calc",
+    "type": "library",
+    "keywords": [
+        "php",
+        "argon",
+        "hash"
+    ],
+    "description": "Calculate settings for Argon hashing function",
+    "homepage": "https://github.com/Simbiat/argon-calc",
+    "license": "AGPL-3.0-or-later",
+    "authors": [
+        {
+            "name": "Dmitrii Kustov",
+            "email": "support@simbiat.eu",
+            "homepage": "https://www.simbiat.eu",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.4",
+        "ext-sodium": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "Simbiat\\": ""
+        }
+    },
+    "support": {
+        "issues": "https://github.com/Simbiat/argon-calc/issues",
+        "source": "https://github.com/Simbiat/argon-calc"
+    }
+}
