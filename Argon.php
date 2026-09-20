@@ -7,7 +7,7 @@ namespace Simbiat;
 /**
  * Calculate Argon2 parameters that fit a time budget.
  */
-class Argon
+final class Argon
 {
     /**
      * Calculate Argon2 parameters that fit a time budget.
@@ -25,7 +25,7 @@ class Argon
      *
      * @return array{memory_cost:int,time_cost:int,threads:int}
      */
-    public function calc(float $max_time_spent = 0.25, int $min_memory_kib = 47104, int $max_memory_kib = 262144, int $min_time_cost = 1, int $threads = 1, string $string_to_test = 'rel@t!velyl0ngte$t5tr1ng', int $max_search_steps = 64): array
+    public function calc(float $max_time_spent = 0.25, int $min_memory_kib = 47_104, int $max_memory_kib = 262_144, int $min_time_cost = 1, int $threads = 1, string $string_to_test = 'rel@t!velyl0ngte$t5tr1ng', int $max_search_steps = 64): array
     {
         if ($max_time_spent <= 0.0) {
             $max_time_spent = 0.25;
@@ -36,8 +36,8 @@ class Argon
         if ($min_time_cost < 0) {
             $min_time_cost = 1;
         }
-        if ($min_memory_kib < 1024) {
-            $min_memory_kib = 1024;
+        if ($min_memory_kib < 1_024) {
+            $min_memory_kib = 1_024;
         }
         if ($max_memory_kib < $min_memory_kib) {
             $max_memory_kib = $min_memory_kib;
@@ -47,13 +47,15 @@ class Argon
         // Do not search below the floor to hit the time budget.
         $floor_time = $this->measure($min_memory_kib, $min_time_cost, $threads, $string_to_test);
         if ($floor_time > $max_time_spent) {
-            throw new \RuntimeException(\sprintf(
-                'Argon2id floor (t=%d, m=%dKiB) takes %.3fs, above max_time_spent of %.3fs on this host. Using floor values anyway; consider raising max_time_spent.',
-                $min_time_cost,
-                $min_memory_kib,
-                $floor_time,
-                $max_time_spent
-            ));
+            throw new \RuntimeException(
+                \sprintf(
+                    'Argon2id floor (t=%d, m=%dKiB) takes %.3fs, above max_time_spent of %.3fs on this host. Using floor values anyway; consider raising max_time_spent.',
+                    $min_time_cost,
+                    $min_memory_kib,
+                    $floor_time,
+                    $max_time_spent,
+                ),
+            );
         }
 
         // Step 1: raise time_cost at the memory floor. Keep only the last value confirmed to be under budget - never the first one that goes over.
@@ -88,6 +90,7 @@ class Argon
     /**
      * Measure median hash time for given parameters, over 5 samples.
      * Median resists single-sample noise (GC pause, scheduler jitter) better than a single timed run.
+     * phpcs:disable Generic.CodeAnalysis.UnusedFunctionParameter, SlevomatCodingStandard.Functions.UnusedParameter
      *
      * @param int    $memory_cost
      * @param int    $time_cost
@@ -107,6 +110,7 @@ class Argon
             $samples[] = (\hrtime(true) - $start) / 1e9;
         }
         \sort($samples);
+
         return $samples[2];
     }
 }
