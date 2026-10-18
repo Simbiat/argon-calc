@@ -60,7 +60,7 @@ final class Argon
 
         // Step 1: raise time_cost at the memory floor. Keep only the last value confirmed to be under budget - never the first one that goes over.
         $last_good_time_cost = $min_time_cost;
-        for ($step = 0; $step < $max_search_steps; $step++) {
+        for ($step = 0; $step < $max_search_steps; ++$step) {
             $candidate = $last_good_time_cost + 1;
             if ($this->measure($min_memory_kib, $candidate, $threads, $string_to_test) > $max_time_spent) {
                 break;
@@ -72,7 +72,7 @@ final class Argon
         // Step 2: spend any remaining budget on memory, at the time_cost just found. Steps of +50% reach the ceiling in a handful of tries.
         $last_good_memory = $min_memory_kib;
         $candidate_memory = $min_memory_kib;
-        for ($step = 0; $step < $max_search_steps; $step++) {
+        for ($step = 0; $step < $max_search_steps; ++$step) {
             $candidate_memory = (int) \min($max_memory_kib, (int) \ceil($candidate_memory * 1.5));
             if ($this->measure($candidate_memory, $time_cost, $threads, $string_to_test) > $max_time_spent) {
                 break;
@@ -90,7 +90,7 @@ final class Argon
     /**
      * Measure median hash time for given parameters, over 5 samples.
      * Median resists single-sample noise (GC pause, scheduler jitter) better than a single timed run.
-     * phpcs:disable Generic.CodeAnalysis.UnusedFunctionParameter, SlevomatCodingStandard.Functions.UnusedParameter
+     * phpcs:disable Generic.CodeAnalysis.UnusedFunctionParameter, SlevomatCodingStandard.Functions.UnusedParameter.
      *
      * @param int    $memory_cost
      * @param int    $time_cost
@@ -102,10 +102,10 @@ final class Argon
     private function measure(int $memory_cost, int $time_cost, int $threads, string $string_to_test): float
     {
         $samples = [];
-        for ($iteration = 0; $iteration < 5; $iteration++) {
+        for ($iteration = 0; $iteration < 5; ++$iteration) {
             $start = \hrtime(true);
             // We do not store the results, and this is not a real credential
-            /** @noinspection UnusedFunctionResultInspection */
+            /* @noinspection UnusedFunctionResultInspection */
             \password_hash($string_to_test, \PASSWORD_ARGON2ID, \compact('memory_cost', 'time_cost', 'threads'));
             $samples[] = (\hrtime(true) - $start) / 1e9;
         }
