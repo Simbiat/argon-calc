@@ -30,15 +30,19 @@ final class Argon
         if ($max_time_spent <= 0.0) {
             $max_time_spent = 0.25;
         }
+
         if ($threads < 0) {
             $threads = 1;
         }
+
         if ($min_time_cost < 0) {
             $min_time_cost = 1;
         }
+
         if ($min_memory_kib < 1_024) {
             $min_memory_kib = 1_024;
         }
+
         if ($max_memory_kib < $min_memory_kib) {
             $max_memory_kib = $min_memory_kib;
         }
@@ -65,18 +69,21 @@ final class Argon
             if ($this->measure($min_memory_kib, $candidate, $threads, $string_to_test) > $max_time_spent) {
                 break;
             }
+
             $last_good_time_cost = $candidate;
         }
+
         $time_cost = $last_good_time_cost;
 
         // Step 2: spend any remaining budget on memory, at the time_cost just found. Steps of +50% reach the ceiling in a handful of tries.
         $last_good_memory = $min_memory_kib;
         $candidate_memory = $min_memory_kib;
         for ($step = 0; $step < $max_search_steps; ++$step) {
-            $candidate_memory = (int) \min($max_memory_kib, (int) \ceil($candidate_memory * 1.5));
+            $candidate_memory = \min($max_memory_kib, (int) \ceil($candidate_memory * 1.5));
             if ($this->measure($candidate_memory, $time_cost, $threads, $string_to_test) > $max_time_spent) {
                 break;
             }
+
             $last_good_memory = $candidate_memory;
             if ($candidate_memory >= $max_memory_kib) {
                 // Hit the hard ceiling while still under budget
@@ -103,12 +110,13 @@ final class Argon
     {
         $samples = [];
         for ($iteration = 0; $iteration < 5; ++$iteration) {
-            $start = \hrtime(true);
+            $start = \hrtime(as_number: true);
             // We do not store the results, and this is not a real credential
             /* @noinspection UnusedFunctionResultInspection */
-            \password_hash($string_to_test, \PASSWORD_ARGON2ID, \compact('memory_cost', 'time_cost', 'threads'));
-            $samples[] = (\hrtime(true) - $start) / 1e9;
+            \password_hash($string_to_test, \PASSWORD_ARGON2ID, ['memory_cost' => $memory_cost, 'time_cost' => $time_cost, 'threads' => $threads]);
+            $samples[] = (\hrtime(as_number: true) - $start) / 1e9;
         }
+
         \sort($samples);
 
         return $samples[2];
