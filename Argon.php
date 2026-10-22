@@ -111,9 +111,7 @@ final class Argon
         $samples = [];
         for ($iteration = 0; $iteration < 5; ++$iteration) {
             $start = \hrtime(as_number: true);
-            // We do not store the results, and this is not a real credential
-            /* @noinspection UnusedFunctionResultInspection */
-            \password_hash($string_to_test, \PASSWORD_ARGON2ID, ['memory_cost' => $memory_cost, 'time_cost' => $time_cost, 'threads' => $threads]);
+            (void) \password_hash($string_to_test, \PASSWORD_ARGON2ID, ['memory_cost' => $memory_cost, 'time_cost' => $time_cost, 'threads' => $threads]);
             $samples[] = (\hrtime(as_number: true) - $start) / 1e9;
         }
 
