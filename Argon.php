@@ -24,6 +24,8 @@ final class Argon
      * @param int    $max_search_steps Safety cap: no search loop will run more than these many steps.
      *
      * @return array{memory_cost:int,time_cost:int,threads:int}
+     *
+     * @throws \RuntimeException
      */
     public function calc(float $max_time_spent = 0.25, int $min_memory_kib = 47_104, int $max_memory_kib = 262_144, int $min_time_cost = 1, int $threads = 1, string $string_to_test = 'rel@t!velyl0ngte$t5tr1ng', int $max_search_steps = 64): array
     {
@@ -49,7 +51,7 @@ final class Argon
 
         // Check the floor itself first. If even the floor is too slow, stop here.
         // Do not search below the floor to hit the time budget.
-        $floor_time = $this->measure($min_memory_kib, $min_time_cost, $threads, $string_to_test);
+        $floor_time = self::measure($min_memory_kib, $min_time_cost, $threads, $string_to_test);
         if ($floor_time > $max_time_spent) {
             throw new \RuntimeException(
                 \sprintf(
@@ -66,7 +68,7 @@ final class Argon
         $last_good_time_cost = $min_time_cost;
         for ($step = 0; $step < $max_search_steps; ++$step) {
             $candidate = $last_good_time_cost + 1;
-            if ($this->measure($min_memory_kib, $candidate, $threads, $string_to_test) > $max_time_spent) {
+            if (self::measure($min_memory_kib, $candidate, $threads, $string_to_test) > $max_time_spent) {
                 break;
             }
 
@@ -80,7 +82,7 @@ final class Argon
         $candidate_memory = $min_memory_kib;
         for ($step = 0; $step < $max_search_steps; ++$step) {
             $candidate_memory = \min($max_memory_kib, (int) \ceil($candidate_memory * 1.5));
-            if ($this->measure($candidate_memory, $time_cost, $threads, $string_to_test) > $max_time_spent) {
+            if (self::measure($candidate_memory, $time_cost, $threads, $string_to_test) > $max_time_spent) {
                 break;
             }
 
@@ -97,7 +99,6 @@ final class Argon
     /**
      * Measure median hash time for given parameters, over 5 samples.
      * Median resists single-sample noise (GC pause, scheduler jitter) better than a single timed run.
-     * phpcs:disable Generic.CodeAnalysis.UnusedFunctionParameter, SlevomatCodingStandard.Functions.UnusedParameter.
      *
      * @param int    $memory_cost
      * @param int    $time_cost
@@ -106,7 +107,7 @@ final class Argon
      *
      * @return float
      */
-    private function measure(int $memory_cost, int $time_cost, int $threads, string $string_to_test): float
+    private static function measure(int $memory_cost, int $time_cost, int $threads, string $string_to_test): float
     {
         $samples = [];
         for ($iteration = 0; $iteration < 5; ++$iteration) {
