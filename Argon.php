@@ -25,7 +25,7 @@ final class Argon
      *
      * @return array{memory_cost:int,time_cost:int,threads:int}
      *
-     * @throws \RuntimeException
+     * @throws \LogicException|\RuntimeException
      */
     public function calc(float $max_time_spent = 0.25, int $min_memory_kib = 47_104, int $max_memory_kib = 262_144, int $min_time_cost = 1, int $threads = 1, string $string_to_test = 'rel@t!velyl0ngte$t5tr1ng', int $max_search_steps = 64): array
     {
@@ -81,7 +81,7 @@ final class Argon
         $last_good_memory = $min_memory_kib;
         $candidate_memory = $min_memory_kib;
         for ($step = 0; $step < $max_search_steps; ++$step) {
-            $candidate_memory = \min($max_memory_kib, (int) \ceil($candidate_memory * 1.5));
+            $candidate_memory = \min($max_memory_kib, (int) \ceil((float) $candidate_memory * 1.5));
             if (self::measure($candidate_memory, $time_cost, $threads, $string_to_test) > $max_time_spent) {
                 break;
             }
@@ -106,18 +106,22 @@ final class Argon
      * @param string $string_to_test
      *
      * @return float
+     *
+     * @throws \LogicException
      */
     private static function measure(int $memory_cost, int $time_cost, int $threads, string $string_to_test): float
     {
         $samples = [];
         for ($iteration = 0; $iteration < 5; ++$iteration) {
-            $start = \hrtime(as_number: true);
+            $start = (float) \hrtime(as_number: true);
             (void) \password_hash($string_to_test, \PASSWORD_ARGON2ID, ['memory_cost' => $memory_cost, 'time_cost' => $time_cost, 'threads' => $threads]);
-            $samples[] = (\hrtime(as_number: true) - $start) / 1e9;
+            $samples[] = ((float) \hrtime(as_number: true) - $start) / 1e9;
         }
 
         \sort($samples);
 
-        return $samples[2];
+        return $samples[2] ?? throw new \LogicException(
+            \sprintf('Expected 5 samples, got %d', \count($samples)),
+        );
     }
 }
