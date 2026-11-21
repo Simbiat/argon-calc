@@ -7,8 +7,45 @@ namespace Simbiat;
 /**
  * Calculate Argon2 parameters that fit a time budget.
  */
-final class Argon
+final readonly class Argon
 {
+    /**
+     * Default minimum time_cost, as recommended by OWASP.
+     * The clamp in calc() turns 0 into 1, so a mutated value (0) gives the same result. Infection cannot detect it.
+     */
+    // @infection-ignore-all
+    private const int DEFAULT_MIN_TIME_COST = 1;
+
+    /**
+     * Default thread count (p), as recommended by OWASP.
+     * The clamp in calc() turns 0 into 1, so a mutated value (0) gives the same result. Infection cannot detect it.
+     */
+    // @infection-ignore-all
+    private const int DEFAULT_THREADS = 1;
+
+    /**
+     * Median index: what item to choose from the sorted benchmark samples.
+     */
+    private const int MEDIAN_INDEX = 2;
+
+    /**
+     * Number of samples for benchmark.
+     */
+    private const int SAMPLE_COUNT = 5;
+
+    /**
+     * @var \Closure(int, int, int, string): float
+     */
+    private \Closure $sampler;
+
+    /**
+     * @param (\Closure(int, int, int, string): float)|null $sampler Returns the seconds that one hash takes. Default: real password_hash() timing.
+     */
+    public function __construct(?\Closure $sampler = null)
+    {
+        $this->sampler = $sampler ?? self::sample(...);
+    }
+
     /**
      * Calculate Argon2 parameters that fit a time budget.
      *
@@ -27,35 +64,26 @@ final class Argon
      *
      * @throws \LogicException|\RuntimeException
      */
-    public function calc(float $max_time_spent = 0.25, int $min_memory_kib = 47_104, int $max_memory_kib = 262_144, int $min_time_cost = 1, int $threads = 1, string $string_to_test = 'rel@t!velyl0ngte$t5tr1ng', int $max_search_steps = 64): array
+    #[\NoDiscard(message: 'The calculated Argon2 parameters must be used.')]
+    public function calc(float $max_time_spent = 0.25, int $min_memory_kib = 47_104, int $max_memory_kib = 262_144, int $min_time_cost = self::DEFAULT_MIN_TIME_COST, int $threads = self::DEFAULT_THREADS, string $string_to_test = 'rel@t!velyl0ngte$t5tr1ng', int $max_search_steps = 64): array
     {
         if ($max_time_spent <= 0.0) {
             $max_time_spent = 0.25;
         }
 
-        if ($threads < 0) {
-            $threads = 1;
-        }
-
-        if ($min_time_cost < 0) {
-            $min_time_cost = 1;
-        }
-
-        if ($min_memory_kib < 1_024) {
-            $min_memory_kib = 1_024;
-        }
-
-        if ($max_memory_kib < $min_memory_kib) {
-            $max_memory_kib = $min_memory_kib;
-        }
+        // Argon2 accepts 1 thread and 1 iteration at minimum, so 0 is invalid, too.
+        $threads = \max(1, $threads);
+        $min_time_cost = \max(1, $min_time_cost);
+        $min_memory_kib = \max(1_024, $min_memory_kib);
+        $max_memory_kib = \max($min_memory_kib, $max_memory_kib);
 
         // Check the floor itself first. If even the floor is too slow, stop here.
         // Do not search below the floor to hit the time budget.
-        $floor_time = self::measure($min_memory_kib, $min_time_cost, $threads, $string_to_test);
+        $floor_time = $this->measure($min_memory_kib, $min_time_cost, $threads, $string_to_test);
         if ($floor_time > $max_time_spent) {
             throw new \RuntimeException(
                 \sprintf(
-                    'Argon2id floor (t=%d, m=%dKiB) takes %.3fs, above max_time_spent of %.3fs on this host. Using floor values anyway; consider raising max_time_spent.',
+                    'Argon2id floor (t=%d, m=%dKiB) takes %.3fs, above max_time_spent of %.3fs. Raise max_time_spent or lower min_memory_kib and min_time_cost.',
                     $min_time_cost,
                     $min_memory_kib,
                     $floor_time,
@@ -68,7 +96,8 @@ final class Argon
         $last_good_time_cost = $min_time_cost;
         for ($step = 0; $step < $max_search_steps; ++$step) {
             $candidate = $last_good_time_cost + 1;
-            if (self::measure($min_memory_kib, $candidate, $threads, $string_to_test) > $max_time_spent) {
+            $elapsed_time = $this->measure($min_memory_kib, $candidate, $threads, $string_to_test);
+            if ($elapsed_time > $max_time_spent) {
                 break;
             }
 
@@ -78,11 +107,13 @@ final class Argon
         $time_cost = $last_good_time_cost;
 
         // Step 2: spend any remaining budget on memory, at the time_cost just found. Steps of +50% reach the ceiling in a handful of tries.
+        // Integer math: (3 * m + 1) >> 1 is ceil(m * 1.5). A right shift by 1 divides by 2 and cannot throw a division error.
         $last_good_memory = $min_memory_kib;
         $candidate_memory = $min_memory_kib;
         for ($step = 0; $step < $max_search_steps; ++$step) {
-            $candidate_memory = \min($max_memory_kib, (int) \ceil((float) $candidate_memory * 1.5));
-            if (self::measure($candidate_memory, $time_cost, $threads, $string_to_test) > $max_time_spent) {
+            $candidate_memory = \min($max_memory_kib, (($candidate_memory * 3) + 1) >> 1);
+            $elapsed_time = $this->measure($candidate_memory, $time_cost, $threads, $string_to_test);
+            if ($elapsed_time > $max_time_spent) {
                 break;
             }
 
@@ -97,7 +128,7 @@ final class Argon
     }
 
     /**
-     * Measure median hash time for given parameters, over 5 samples.
+     * Measure median hash time for given parameters, over SAMPLE_COUNT samples.
      * Median resists single-sample noise (GC pause, scheduler jitter) better than a single timed run.
      *
      * @param int    $memory_cost
@@ -109,19 +140,44 @@ final class Argon
      *
      * @throws \LogicException
      */
-    private static function measure(int $memory_cost, int $time_cost, int $threads, string $string_to_test): float
+    private function measure(int $memory_cost, int $time_cost, int $threads, string $string_to_test): float
     {
         $samples = [];
-        for ($iteration = 0; $iteration < 5; ++$iteration) {
-            $start = (float) \hrtime(as_number: true);
-            (void) \password_hash($string_to_test, \PASSWORD_ARGON2ID, ['memory_cost' => $memory_cost, 'time_cost' => $time_cost, 'threads' => $threads]);
-            $samples[] = ((float) \hrtime(as_number: true) - $start) / 1e9;
+        for ($iteration = 0; $iteration < self::SAMPLE_COUNT; ++$iteration) {
+            $samples[] = ($this->sampler)($memory_cost, $time_cost, $threads, $string_to_test);
         }
 
         \sort($samples);
 
-        return $samples[2] ?? throw new \LogicException(
-            \sprintf('Expected 5 samples, got %d', \count($samples)),
+        // The guard below cannot be reached: the loop always adds SAMPLE_COUNT items. It exists only for static analysis.
+        // @infection-ignore-all
+        return $samples[self::MEDIAN_INDEX] ?? throw new \LogicException(
+            \sprintf('Expected %d samples, got %d', self::SAMPLE_COUNT, \count($samples)),
         );
+    }
+
+    /**
+     * Default sampler function to use for benchmarking.
+     *
+     * @param int    $memory_cost    How much memory to use
+     * @param int    $time_cost      How much time to spend on hashing
+     * @param int    $threads        How many threads to use
+     * @param string $string_to_test String to test hashing on
+     *
+     * @return float
+     */
+    private static function sample(int $memory_cost, int $time_cost, int $threads, string $string_to_test): float
+    {
+        /**
+         * The float casts are only for strict static analysis. int and float give the same result here, so Infection cannot detect them.
+         *
+         * @infection-ignore-all
+         */
+        $start = (float) \hrtime(as_number: true);
+        (void) \password_hash($string_to_test, \PASSWORD_ARGON2ID, ['memory_cost' => $memory_cost, 'time_cost' => $time_cost, 'threads' => $threads]);
+        // @infection-ignore-all
+        $end = (float) \hrtime(as_number: true);
+
+        return ($end - $start) / 1e9;
     }
 }
